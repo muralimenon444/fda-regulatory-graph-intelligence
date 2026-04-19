@@ -1,0 +1,9 @@
+# Databricks & Python Cache
+__pycache__/
+*.py[cod]
+.databricks/
+.DS_Store
+
+# Environment
+.env
+venv/
