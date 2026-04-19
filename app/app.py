@@ -14,7 +14,7 @@ print(f"DEBUG: System Path initialized with Root: {repo_root}")
 print(f"DEBUG: Contents of Root: {os.listdir(repo_root)}")
 
 # Configure FAISS index path for Streamlit deployment
-faiss_index_path = os.path.join(repo_root, "app", "vector_store")
+faiss_index_path = os.path.join(repo_root, "vector_store")
 print(f"DEBUG: FAISS index path configured: {faiss_index_path}")
 
 """

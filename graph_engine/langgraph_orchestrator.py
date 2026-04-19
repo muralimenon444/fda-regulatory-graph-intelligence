@@ -11,7 +11,7 @@ import os
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 
 class GraphState(TypedDict):
@@ -57,7 +57,7 @@ class HealthcareGraphRAG:
         if faiss_index_path is None:
             # Try to find the vector store relative to current file
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            faiss_index_path = os.path.join(os.path.dirname(current_dir), "app", "vector_store")
+            faiss_index_path = os.path.join(os.path.dirname(current_dir), "vector_store")
         
         self.faiss_index_path = faiss_index_path
         
