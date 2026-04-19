@@ -32,7 +32,7 @@ class HealthcareGraphRAG:
     
     Workflow:
     1. Search Node: Local FAISS vector search
-    2. Reasoning Node: LLM synthesis using databricks-llama-3-3-70b-instruct
+    2. Reasoning Node: LLM synthesis using configured Databricks LLM endpoint
     3. Validation Node: Hallucination check against retrieved evidence
     
     Portable Design:
@@ -87,6 +87,10 @@ class HealthcareGraphRAG:
         # Explicitly pull credentials from environment variables (provided by Streamlit Secrets)
         db_host = os.getenv("DATABRICKS_HOST")
         db_token = os.getenv("DATABRICKS_TOKEN")
+        
+        # Force the app to use the secret, with a fallback to the correct full name
+        self.model_endpoint = os.getenv("MODEL_NAME", "databricks-meta-llama-3-3-70b-instruct")
+        print(f"DEBUG: Model endpoint configured: {self.model_endpoint}")
         
         if db_host and db_token:
             self.workspace = WorkspaceClient(host=db_host, token=db_token)
@@ -228,7 +232,7 @@ Please provide a comprehensive answer with citations."""
         # Call Databricks Foundation Model API
         try:
             response = self.workspace.serving_endpoints.query(
-                name="databricks-llama-3-3-70b-instruct",
+                name=self.model_endpoint,
                 messages=[
                     ChatMessage(role=ChatMessageRole.SYSTEM, content=system_prompt),
                     ChatMessage(role=ChatMessageRole.USER, content=user_prompt)

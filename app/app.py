@@ -13,6 +13,10 @@ if repo_root not in sys.path:
 print(f"DEBUG: System Path initialized with Root: {repo_root}")
 print(f"DEBUG: Contents of Root: {os.listdir(repo_root)}")
 
+# Configure FAISS index path for Streamlit deployment
+faiss_index_path = os.path.join(repo_root, "app", "vector_store")
+print(f"DEBUG: FAISS index path configured: {faiss_index_path}")
+
 """
 Streamlit Research Interface for Healthcare Regulatory Intelligence
 Healthcare Regulatory Intelligence with side-by-side Evidence + Analysis
@@ -154,8 +158,13 @@ def main():
                 # Normalize input before passing to orchestrator
                 normalized_query = normalize_input(query)
                 
+                # Diagnostic logs for debugging
+                MODEL_ENDPOINT = os.getenv("MODEL_NAME", "databricks-meta-llama-3-3-70b-instruct")
+                print(f"DEBUG: Active LLM Endpoint: {MODEL_ENDPOINT}")
+                print(f"DEBUG: Loading FAISS from: {faiss_index_path}")
+                
                 # Initialize orchestrator and execute query
-                orchestrator = get_orchestrator()
+                orchestrator = get_orchestrator(faiss_index_path=faiss_index_path)
                 results = orchestrator.query(normalized_query)
                 
                 st.session_state["results"] = results
