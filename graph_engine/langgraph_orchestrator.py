@@ -1,14 +1,17 @@
 """
 LangGraph Orchestrator for Healthcare Regulatory Intelligence
 Implements: Search Node → Reasoning Node → Validation Node
+
+PORTABLE VERSION: Uses local FAISS index + Databricks Foundation Model API
 """
 
 from typing import TypedDict, List, Dict, Any
 from langgraph.graph import StateGraph, END
 import os
-from databricks.vector_search.client import VectorSearchClient
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 
 class GraphState(TypedDict):
@@ -28,24 +31,60 @@ class HealthcareGraphRAG:
     Agentic GraphRAG Orchestrator using LangGraph
     
     Workflow:
-    1. Search Node: Hybrid vector + graph traversal
+    1. Search Node: Local FAISS vector search
     2. Reasoning Node: LLM synthesis using databricks-llama-3-3-70b-instruct
-    3. Validation Node: Hallucination check against raw knowledge graph
+    3. Validation Node: Hallucination check against retrieved evidence
+    
+    Portable Design:
+    - Uses local FAISS index (no Databricks Vector Search dependency)
+    - Embeddings via sentence-transformers/all-MiniLM-L6-v2 (<100ms)
+    - LLM reasoning via Databricks Foundation Model API
     """
     
     def __init__(
         self,
-        vector_index_name: str = "hc_regulatory_sandbox.metadata_results.drug_indications_index",
-        catalog: str = "hc_regulatory_sandbox",
-        schema: str = "metadata_results"
+        faiss_index_path: str = None,
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     ):
-        self.catalog = catalog
-        self.schema = schema
-        self.vector_index_name = vector_index_name
+        """
+        Initialize the orchestrator with local FAISS index
         
-        # Initialize Databricks clients
+        Args:
+            faiss_index_path: Path to FAISS index directory (defaults to ./app/vector_store)
+            embedding_model: HuggingFace model for embeddings
+        """
+        # Default to app/vector_store directory
+        if faiss_index_path is None:
+            # Try to find the vector store relative to current file
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            faiss_index_path = os.path.join(os.path.dirname(current_dir), "app", "vector_store")
+        
+        self.faiss_index_path = faiss_index_path
+        
+        # Initialize local embeddings (all-MiniLM-L6-v2 for <100ms latency)
+        print(f"Loading embeddings model: {embedding_model}")
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name=embedding_model,
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
+        )
+        
+        # Load FAISS index from disk
+        print(f"Loading FAISS index from: {self.faiss_index_path}")
+        try:
+            self.vector_store = FAISS.load_local(
+                self.faiss_index_path,
+                self.embeddings,
+                allow_dangerous_deserialization=True  # Required for FAISS loading
+            )
+            print("SUCCESS: Orchestrator initialized using local FAISS index.")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not load FAISS index from {self.faiss_index_path}: {e}")
+            print("   Orchestrator will continue but vector search will be unavailable.")
+            self.vector_store = None
+        
+        # Initialize Databricks client for LLM calls
         self.workspace = WorkspaceClient()
-        self.vector_client = VectorSearchClient()
         
         # Build LangGraph workflow
         self.workflow = self._build_workflow()
@@ -69,56 +108,52 @@ class HealthcareGraphRAG:
     
     def search_node(self, state: GraphState) -> GraphState:
         """
-        Search Node: Hybrid Vector + Graph Traversal
+        Search Node: Local FAISS Vector Search
         
         1. Normalize query with UPPER(TRIM())
-        2. Vector search on clinical_indications
-        3. Graph traversal for multi-hop relationships
+        2. Local FAISS similarity search on clinical indications
+        3. Returns top-k results with metadata
         """
         query = state["query"]
         normalized_query = query.upper().strip()
         state["normalized_query"] = normalized_query
         
-        # Vector Search: Find similar clinical indications
-        try:
-            vector_results = self.vector_client.get_index(
-                index_name=self.vector_index_name
-            ).similarity_search(
-                query_text=query,
-                columns=["brand_name", "clinical_indications", "active_ingredient"],
-                num_results=10
-            )
-            state["vector_results"] = vector_results.get("result", {}).get("data_array", [])
-        except Exception as e:
-            print(f"⚠️ Vector search error: {e}")
-            state["vector_results"] = []
+        # Local FAISS Vector Search
+        vector_results = []
+        if self.vector_store is not None:
+            try:
+                # Perform similarity search with metadata
+                results = self.vector_store.similarity_search_with_score(
+                    query=query,
+                    k=10  # Top 10 results
+                )
+                
+                # Convert to dictionary format compatible with downstream nodes
+                for doc, score in results:
+                    vector_results.append({
+                        "content": doc.page_content,
+                        "metadata": doc.metadata,
+                        "similarity_score": float(score),
+                        # Extract common fields if available in metadata
+                        "brand_name": doc.metadata.get("brand_name", "Unknown"),
+                        "clinical_indications": doc.metadata.get("clinical_indications", doc.page_content),
+                        "active_ingredient": doc.metadata.get("active_ingredient", "N/A")
+                    })
+                
+                print(f"✅ Retrieved {len(vector_results)} results from FAISS index")
+                
+            except Exception as e:
+                print(f"⚠️ FAISS search error: {e}")
+                vector_results = []
+        else:
+            print("⚠️ FAISS vector store not available - skipping vector search")
         
-        # Graph Traversal: Multi-hop relationship queries
-        graph_query = f"""
-        WITH drug_matches AS (
-            SELECT DISTINCT entity_normalized
-            FROM {self.catalog}.{self.schema}.universal_entity_index
-            WHERE entity_normalized = '{normalized_query}'
-            AND entity_type = 'DRUG'
-        )
-        SELECT 
-            kb.source_entity,
-            kb.relationship_type,
-            kb.target_entity,
-            kb.confidence_score
-        FROM {self.catalog}.{self.schema}.knowledge_base kb
-        INNER JOIN drug_matches dm
-            ON kb.source_entity = dm.entity_normalized
-        ORDER BY kb.confidence_score DESC
-        LIMIT 50
-        """
+        state["vector_results"] = vector_results
         
-        try:
-            graph_df = spark.sql(graph_query)
-            state["graph_results"] = [row.asDict() for row in graph_df.collect()]
-        except Exception as e:
-            print(f"⚠️ Graph query error: {e}")
-            state["graph_results"] = []
+        # Graph Traversal: Placeholder for future knowledge graph integration
+        # In portable mode, we can load graph relationships from parquet/json files
+        # For now, we'll use vector results as the primary evidence source
+        state["graph_results"] = []
         
         return state
     
@@ -138,8 +173,15 @@ class HealthcareGraphRAG:
         if vector_results:
             context_parts.append("**Vector Search Results (Clinical Indications):**")
             for i, result in enumerate(vector_results[:5], 1):
+                brand_name = result.get('brand_name', 'Unknown')
+                indication = result.get('clinical_indications', 'N/A')
+                score = result.get('similarity_score', 0.0)
+                
+                # Truncate long indications
+                indication_preview = indication[:200] + "..." if len(indication) > 200 else indication
+                
                 context_parts.append(
-                    f"{i}. {result.get('brand_name', 'Unknown')}: {result.get('clinical_indications', 'N/A')[:200]}"
+                    f"{i}. {brand_name}: {indication_preview} (similarity: {score:.3f})"
                 )
         
         if graph_results:
@@ -150,13 +192,17 @@ class HealthcareGraphRAG:
                     f"(confidence: {rel['confidence_score']:.2f})"
                 )
         
-        context = "\n".join(context_parts)
+        if not context_parts:
+            context = "No relevant evidence found in the knowledge base."
+        else:
+            context = "\n".join(context_parts)
         
         # Construct prompt for LLM
         system_prompt = """You are a healthcare regulatory intelligence assistant. 
 Synthesize the provided evidence to answer the user's question. 
 Cite specific evidence using numbered references [1], [2], etc.
-Be precise and only state facts supported by the evidence."""
+Be precise and only state facts supported by the evidence.
+If the evidence is insufficient, clearly state what information is missing."""
         
         user_prompt = f"""Question: {query}
 
@@ -179,6 +225,7 @@ Please provide a comprehensive answer with citations."""
             state["llm_response"] = response.choices[0].message.content
         except Exception as e:
             state["llm_response"] = f"Error generating response: {e}"
+            print(f"⚠️ LLM API error: {e}")
         
         return state
     
@@ -186,32 +233,55 @@ Please provide a comprehensive answer with citations."""
         """
         Validation Node: Hallucination Check
         
-        Compares LLM claims against raw knowledge graph data
+        Compares LLM claims against raw retrieved evidence
         """
         llm_response = state["llm_response"]
+        vector_results = state["vector_results"]
         graph_results = state["graph_results"]
         
-        # Simple validation: Check if LLM mentions entities that exist in graph
+        # Collect all entities mentioned in evidence
         mentioned_entities = set()
+        
+        # Extract from vector results
+        for result in vector_results:
+            brand_name = result.get("brand_name", "").lower()
+            ingredient = result.get("active_ingredient", "").lower()
+            if brand_name and brand_name != "unknown":
+                mentioned_entities.add(brand_name)
+            if ingredient and ingredient != "n/a":
+                mentioned_entities.add(ingredient)
+        
+        # Extract from graph results (if available)
         for result in graph_results:
             mentioned_entities.add(result["source_entity"].lower())
             mentioned_entities.add(result["target_entity"].lower())
         
+        # Validation: Check if LLM mentions entities that exist in evidence
         llm_lower = llm_response.lower()
-        validated_entities = [e for e in mentioned_entities if e in llm_lower]
+        validated_entities = [e for e in mentioned_entities if e in llm_lower and len(e) > 3]
         
-        validation_score = len(validated_entities) / max(len(mentioned_entities), 1)
+        validation_score = len(validated_entities) / max(len(mentioned_entities), 1) if mentioned_entities else 0.0
         state["validation_score"] = validation_score
         
         # Build evidence table for UI
-        state["evidence_table"] = graph_results[:20]  # Top 20 relationships
+        evidence_table = []
+        for i, result in enumerate(vector_results[:20], 1):
+            evidence_table.append({
+                "rank": i,
+                "brand_name": result.get("brand_name", "Unknown"),
+                "indication": result.get("clinical_indications", "N/A")[:150],
+                "similarity": f"{result.get('similarity_score', 0.0):.3f}"
+            })
+        
+        state["evidence_table"] = evidence_table
         
         # Final answer includes validation metadata
+        total_sources = len(vector_results) + len(graph_results)
         state["final_answer"] = f"""{llm_response}
 
 ---
 **Validation Score**: {validation_score:.2%}
-**Evidence Sources**: {len(graph_results)} knowledge graph relationships
+**Evidence Sources**: {total_sources} total ({len(vector_results)} vector, {len(graph_results)} graph)
 """
         
         return state
@@ -247,12 +317,27 @@ Please provide a comprehensive answer with citations."""
         }
 
 
-# Initialize global orchestrator instance
+# Convenience functions for backward compatibility
 _orchestrator = None
 
-def get_orchestrator() -> HealthcareGraphRAG:
+def get_orchestrator(faiss_index_path: str = None) -> HealthcareGraphRAG:
     """Singleton accessor for the orchestrator"""
     global _orchestrator
     if _orchestrator is None:
-        _orchestrator = HealthcareGraphRAG()
+        _orchestrator = HealthcareGraphRAG(faiss_index_path=faiss_index_path)
     return _orchestrator
+
+
+def query_regulatory_agent(query: str, faiss_index_path: str = None) -> Dict[str, Any]:
+    """
+    Convenience function to query the regulatory agent
+    
+    Args:
+        query: Natural language question
+        faiss_index_path: Optional path to FAISS index
+    
+    Returns:
+        Dictionary with final_answer and evidence_table
+    """
+    orchestrator = get_orchestrator(faiss_index_path=faiss_index_path)
+    return orchestrator.query(query)
