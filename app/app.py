@@ -1,3 +1,18 @@
+import sys
+import os
+
+# Force the repository root into the Python path
+# This ensures 'graph_engine' is discoverable regardless of where the script is launched
+current_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.abspath(os.path.join(current_dir, ".."))
+
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+# Diagnostic log - This will show up in Streamlit 'Manage App' logs
+print(f"DEBUG: System Path initialized with Root: {repo_root}")
+print(f"DEBUG: Contents of Root: {os.listdir(repo_root)}")
+
 """
 Streamlit Research Interface for Healthcare Regulatory Intelligence
 Modeled after Elicit/Perplexity AI with side-by-side Evidence + Analysis
@@ -9,7 +24,7 @@ import sys
 import os
 
 # Add graph_engine to path
-sys.path.append('/Workspace/Repos/muralimenon444@gmail.com/fda-regulatory-graph-intelligence')
+# sys.path.append('/Workspace/Repos/muralimenon444@gmail.com/fda-regulatory-graph-intelligence')
 
 from graph_engine.langgraph_orchestrator import get_orchestrator
 
