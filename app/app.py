@@ -15,7 +15,7 @@ print(f"DEBUG: Contents of Root: {os.listdir(repo_root)}")
 
 """
 Streamlit Research Interface for Healthcare Regulatory Intelligence
-Modeled after Elicit/Perplexity AI with side-by-side Evidence + Analysis
+Healthcare Regulatory Intelligence with side-by-side Evidence + Analysis
 """
 
 import streamlit as st
@@ -37,7 +37,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Elicit-style layout
+# Custom CSS for professional layout
 st.markdown("""
 <style>
     .main-header {

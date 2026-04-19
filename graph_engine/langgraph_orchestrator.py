@@ -84,7 +84,21 @@ class HealthcareGraphRAG:
             self.vector_store = None
         
         # Initialize Databricks client for LLM calls
-        self.workspace = WorkspaceClient()
+        # Explicitly pull credentials from environment variables (provided by Streamlit Secrets)
+        db_host = os.getenv("DATABRICKS_HOST")
+        db_token = os.getenv("DATABRICKS_TOKEN")
+        
+        if db_host and db_token:
+            self.workspace = WorkspaceClient(host=db_host, token=db_token)
+            print("DEBUG: WorkspaceClient initialized with explicit environment credentials.")
+        else:
+            # Fallback for local/Databricks environment
+            try:
+                self.workspace = WorkspaceClient()
+                print("DEBUG: WorkspaceClient initialized using default authentication.")
+            except Exception as e:
+                print(f"CRITICAL: Failed to initialize WorkspaceClient. Missing credentials. Error: {e}")
+                raise e
         
         # Build LangGraph workflow
         self.workflow = self._build_workflow()
