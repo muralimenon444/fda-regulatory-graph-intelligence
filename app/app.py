@@ -140,7 +140,7 @@ import networkx as nx
 
 def build_knowledge_graph(evidence_table):
     """
-    Build force-directed network graph: Manufacturers → Drugs → Ingredients
+    Build force-directed network: Manufacturers → Drugs → Active Ingredients
     
     Args:
         evidence_table: List of dicts with manufacturer, drug_name, ingredients
@@ -150,6 +150,7 @@ def build_knowledge_graph(evidence_table):
     """
     import networkx as nx
     from pyvis.network import Network
+    import re
     
     # Use undirected graph for natural clustering
     G = nx.Graph()
@@ -164,25 +165,34 @@ def build_knowledge_graph(evidence_table):
     ingredients_added = set()
     edge_count = 0
     
-    for idx, item in enumerate(evidence_table[:10], 1):  # Limit to 10 items for clarity
+    for idx, item in enumerate(evidence_table[:10], 1):
         manufacturer = item.get("manufacturer", "Unknown")
-        drug_name = item.get("drug_name", "Unknown")
-        ingredients_str = item.get("ingredients", "")
+        drug_name_meta = item.get("drug_name", "Unknown")
+        brand_name = item.get("brand_name", "")
         active_ingredient = item.get("active_ingredient", "N/A")
+        ingredients_str = item.get("ingredients", "")
         
         if manufacturer == "Unknown":
             continue
         
-        # Create unique drug identifier
-        if drug_name == manufacturer or drug_name == "Unknown":
+        # SMART DRUG NAME EXTRACTION
+        # If drug_name == manufacturer (repackager case), use active_ingredient or brand_name
+        if drug_name_meta == manufacturer or drug_name_meta == "Unknown":
             if active_ingredient and active_ingredient != "N/A":
-                drug_identifier = active_ingredient
+                drug_identifier = active_ingredient.split('|')[0].strip()  # First active ingredient
+            elif brand_name and brand_name != manufacturer:
+                # Extract drug name from brand_name like "MANUFACTURER (DrugName)"
+                match = re.search(r'\(([^)]+)\)', brand_name)
+                if match:
+                    drug_identifier = match.group(1)
+                else:
+                    drug_identifier = f"{manufacturer}_product_{idx}"
             else:
-                drug_identifier = f"{manufacturer}_product"
+                drug_identifier = f"{manufacturer}_product_{idx}"
         else:
-            drug_identifier = drug_name
+            drug_identifier = drug_name_meta
         
-        print(f"\n{idx}. {manufacturer} -> {drug_identifier}")
+        print(f"\n{idx}. {manufacturer} → {drug_identifier}")
         
         # Add MANUFACTURER node (LARGE BLUE CIRCLE)
         if manufacturer not in manufacturers_added:
@@ -191,11 +201,10 @@ def build_knowledge_graph(evidence_table):
                 label=manufacturer[:30],
                 title=f"Manufacturer: {manufacturer}",
                 color="#3b82f6",  # bright blue
-                size=50,  # LARGER
-                shape="dot",  # Circle
+                size=50,
+                shape="dot",
                 borderWidth=3,
-                borderWidthSelected=4,
-                font={'size': 16, 'color': 'white', 'bold': True, 'face': 'arial'}
+                font={'size': 16, 'color': 'white', 'bold': True}
             )
             manufacturers_added.add(manufacturer)
             print(f"   + Manufacturer (blue): {manufacturer}")
@@ -207,10 +216,10 @@ def build_knowledge_graph(evidence_table):
                 label=drug_identifier[:30],
                 title=f"Drug: {drug_identifier}",
                 color="#10b981",  # bright green
-                size=35,  # Medium
-                shape="dot",  # Circle
+                size=35,
+                shape="dot",
                 borderWidth=2,
-                font={'size': 14, 'color': 'white', 'face': 'arial'}
+                font={'size': 14, 'color': 'white'}
             )
             drugs_added.add(drug_identifier)
             print(f"   + Drug (green): {drug_identifier}")
@@ -221,60 +230,61 @@ def build_knowledge_graph(evidence_table):
                 manufacturer,
                 drug_identifier,
                 title="manufactures",
-                color={'color': '#FFFFFF', 'highlight': '#FFFF00'},  # white, highlight yellow
-                width=5,  # VERY THICK
-                value=5  # For scaling
+                color={'color': '#FFFFFF', 'highlight': '#FFFF00'},
+                width=5,
+                value=5
             )
             edge_count += 1
             print(f"   ✓ Edge: {manufacturer} ↔ {drug_identifier}")
         
-        # Add INGREDIENTS (SMALL ORANGE CIRCLES)
-        if ingredients_str:
-            ingredients_list = [ing.strip() for ing in ingredients_str.split("|") if ing.strip()]
+        # Add ACTIVE INGREDIENT as orange node (better than full ingredients list)
+        if active_ingredient and active_ingredient != "N/A":
+            # Split if multiple active ingredients
+            active_ing_list = [ing.strip() for ing in active_ingredient.split('|') if ing.strip()]
             
-            for ingredient in ingredients_list[:3]:  # Up to 3 ingredients
-                if len(ingredient) > 3:
-                    if ingredient not in ingredients_added:
+            for ing in active_ing_list[:2]:  # Up to 2 active ingredients per drug
+                if len(ing) > 3 and ing.upper() != drug_identifier.upper():
+                    if ing not in ingredients_added:
                         G.add_node(
-                            ingredient,
-                            label=ingredient[:20],
-                            title=f"Ingredient: {ingredient}",
+                            ing,
+                            label=ing[:20],
+                            title=f"Active Ingredient: {ing}",
                             color="#f59e0b",  # bright orange
-                            size=25,  # Smaller
-                            shape="dot",  # Circle
+                            size=25,
+                            shape="dot",
                             borderWidth=1,
-                            font={'size': 12, 'color': 'white', 'face': 'arial'}
+                            font={'size': 12, 'color': 'white'}
                         )
-                        ingredients_added.add(ingredient)
-                        print(f"     + Ingredient (orange): {ingredient}")
+                        ingredients_added.add(ing)
+                        print(f"     + Ingredient (orange): {ing}")
                     
-                    # Add EDGE: Drug ↔ Ingredient (MEDIUM GRAY LINE)
-                    if not G.has_edge(drug_identifier, ingredient):
+                    # Add EDGE: Drug ↔ Ingredient
+                    if not G.has_edge(drug_identifier, ing):
                         G.add_edge(
                             drug_identifier,
-                            ingredient,
+                            ing,
                             title="contains",
-                            color={'color': '#999999', 'highlight': '#FFFF00'},  # light gray
+                            color={'color': '#999999', 'highlight': '#FFFF00'},
                             width=3,
                             value=3
                         )
                         edge_count += 1
-                        print(f"     ✓ Edge: {drug_identifier} ↔ {ingredient}")
+                        print(f"     ✓ Edge: {drug_identifier} ↔ {ing}")
     
     print(f"\n{'='*60}")
     print(f"NETWORK SUMMARY:")
     print(f"  🔵 Manufacturers: {len(manufacturers_added)}")
     print(f"  🟢 Drugs: {len(drugs_added)}")
-    print(f"  🟠 Ingredients: {len(ingredients_added)}")
+    print(f"  🟠 Active Ingredients: {len(ingredients_added)}")
     print(f"  Total nodes: {len(G.nodes())}")
     print(f"  Total edges: {edge_count}")
     print(f"{'='*60}\n")
     
     if len(G.nodes()) == 0:
-        print("⚠️  No nodes created - check evidence_table")
+        print("⚠️  No nodes created")
         return None, 0, 0
     
-    # Create PyVis with PHYSICS-BASED layout (force-directed)
+    # Create PyVis with PHYSICS-BASED layout
     net = Network(
         height="500px",
         width="100%",
@@ -283,30 +293,19 @@ def build_knowledge_graph(evidence_table):
         notebook=False
     )
     
-    # Import graph
     net.from_nx(G)
     
-    # Configure FORCE-DIRECTED PHYSICS (like Neo4j)
+    # Force-directed layout config
     net.set_options("""
     {
       "nodes": {
-        "font": {"size": 14, "color": "white", "face": "arial"},
-        "scaling": {
-          "min": 10,
-          "max": 50
-        }
+        "font": {"size": 14, "color": "white"},
+        "scaling": {"min": 10, "max": 50}
       },
       "edges": {
         "color": {"inherit": false},
-        "smooth": {
-          "enabled": true,
-          "type": "continuous",
-          "roundness": 0.5
-        },
-        "scaling": {
-          "min": 1,
-          "max": 5
-        }
+        "smooth": {"enabled": true, "type": "continuous"},
+        "scaling": {"min": 1, "max": 5}
       },
       "physics": {
         "enabled": true,
@@ -315,29 +314,20 @@ def build_knowledge_graph(evidence_table):
           "centralGravity": 0.3,
           "springLength": 200,
           "springConstant": 0.04,
-          "damping": 0.5,
-          "avoidOverlap": 0.5
+          "damping": 0.5
         },
-        "stabilization": {
-          "enabled": true,
-          "iterations": 200,
-          "updateInterval": 25
-        },
-        "minVelocity": 0.75
+        "stabilization": {"enabled": true, "iterations": 200}
       },
       "interaction": {
         "hover": true,
-        "tooltipDelay": 100,
         "zoomView": true,
         "dragView": true,
-        "navigationButtons": true,
-        "keyboard": {
-          "enabled": true
-        }
+        "navigationButtons": true
       }
     }
     """)
     
+    return net, len(G.nodes()), len(G.edges())
     return net, len(G.nodes()), len(G.edges())
 
 
