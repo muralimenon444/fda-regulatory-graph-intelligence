@@ -127,6 +127,173 @@ def get_validation_badge(score: float) -> str:
     return f'<span class="validation-badge {badge_class}">{label} ({score:.1%})</span>'
 
 
+
+
+# ============================================================================
+# Graph Visualization Functions
+# ============================================================================
+
+import streamlit.components.v1 as components
+from pyvis.network import Network
+import networkx as nx
+
+
+def build_knowledge_graph(evidence_table):
+    """
+    Build interactive knowledge graph from evidence_table
+    
+    Args:
+        evidence_table: List of dicts with manufacturer, drug_name, ingredients
+    
+    Returns:
+        PyVis Network object, node count, edge count
+    """
+    G = nx.Graph()
+    
+    # Track unique entities to avoid duplicates
+    manufacturers = set()
+    drugs = set()
+    ingredients = set()
+    
+    for item in evidence_table:
+        manufacturer = item.get("manufacturer", "Unknown")
+        drug_name = item.get("drug_name", "Unknown")
+        ingredient_str = item.get("ingredients", "")
+        
+        # Skip unknown entries
+        if manufacturer == "Unknown" or drug_name == "Unknown":
+            continue
+        
+        # Add manufacturer node
+        if manufacturer not in manufacturers:
+            G.add_node(
+                manufacturer, 
+                title=f"Manufacturer: {manufacturer}",
+                color="#3b82f6",  # blue
+                size=30,
+                group="manufacturer"
+            )
+            manufacturers.add(manufacturer)
+        
+        # Add drug node
+        if drug_name not in drugs:
+            G.add_node(
+                drug_name,
+                title=f"Drug: {drug_name}",
+                color="#10b981",  # green
+                size=25,
+                group="drug"
+            )
+            drugs.add(drug_name)
+        
+        # Add edge: manufacturer → drug
+        if not G.has_edge(manufacturer, drug_name):
+            G.add_edge(manufacturer, drug_name, title="manufactures", color="#888")
+        
+        # Add ingredient nodes (parse pipe-separated list)
+        if ingredient_str:
+            for ingredient in ingredient_str.split("|")[:3]:  # Limit to 3 ingredients per drug
+                ingredient = ingredient.strip()
+                if ingredient and ingredient not in ingredients:
+                    G.add_node(
+                        ingredient,
+                        title=f"Ingredient: {ingredient}",
+                        color="#f59e0b",  # orange
+                        size=20,
+                        group="ingredient"
+                    )
+                    ingredients.add(ingredient)
+                
+                if ingredient and not G.has_edge(drug_name, ingredient):
+                    G.add_edge(drug_name, ingredient, title="contains", color="#666")
+    
+    # Create PyVis network
+    net = Network(
+        height="650px",
+        width="100%",
+        bgcolor="#1e1e1e",
+        font_color="white",
+        notebook=False
+    )
+    
+    # Import NetworkX graph
+    net.from_nx(G)
+    
+    # Configure physics for better layout
+    net.set_options("""
+    {
+      "nodes": {
+        "font": {"size": 14, "color": "white"}
+      },
+      "edges": {
+        "color": {"inherit": true},
+        "smooth": {"type": "continuous"}
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -35000,
+          "centralGravity": 0.3,
+          "springLength": 150,
+          "springConstant": 0.04
+        },
+        "minVelocity": 0.75
+      }
+    }
+    """)
+    
+    return net, len(G.nodes()), len(G.edges())
+
+
+def display_knowledge_graph(evidence_table):
+    """
+    Display interactive knowledge graph in Streamlit
+    
+    Args:
+        evidence_table: List of evidence items from orchestrator
+    """
+    if not evidence_table or len(evidence_table) == 0:
+        st.info("No graph data available. Run a search to see relationships.")
+        return
+    
+    st.markdown("### 🕸️ Knowledge Graph Visualization")
+    st.markdown("*Drag nodes to explore relationships. Zoom with mouse wheel.*")
+    
+    try:
+        # Build graph
+        net, node_count, edge_count = build_knowledge_graph(evidence_table)
+        
+        if node_count == 0:
+            st.warning("No graph relationships found in evidence.")
+            return
+        
+        # Display stats
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Nodes", node_count)
+        col2.metric("Edges", edge_count)
+        col3.metric("Evidence", len(evidence_table))
+        
+        # Generate and display HTML
+        graph_html = net.generate_html()
+        components.html(graph_html, height=670, scrolling=False)
+        
+        # Legend
+        st.markdown("""
+        <div style="padding: 10px; background: #f9fafb; border-radius: 5px; margin-top: 10px;">
+            <strong>Legend:</strong> 
+            <span style="color: #3b82f6;">●</span> Manufacturers  
+            <span style="color: #10b981;">●</span> Drugs  
+            <span style="color: #f59e0b;">●</span> Ingredients
+        </div>
+        """, unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.error(f"Error generating graph: {str(e)}")
+        print(f"Graph generation error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+
 def main():
     # Header
     st.markdown('<div class="main-header">🏥 Healthcare Regulatory Intelligence</div>', unsafe_allow_html=True)
@@ -261,6 +428,12 @@ def main():
                     file_name="evidence_table.csv",
                     mime="text/csv"
                 )
+            
+                
+                # Knowledge Graph Visualization
+                st.divider()
+                display_knowledge_graph(evidence_table)
+            
             else:
                 st.info("No evidence found in knowledge graph.")
     
