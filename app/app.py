@@ -140,7 +140,7 @@ import networkx as nx
 
 def build_knowledge_graph(evidence_table):
     """
-    Build hierarchical knowledge graph: Manufacturers → Drugs → Ingredients
+    Build force-directed network graph: Manufacturers → Drugs → Ingredients
     
     Args:
         evidence_table: List of dicts with manufacturer, drug_name, ingredients
@@ -151,11 +151,11 @@ def build_knowledge_graph(evidence_table):
     import networkx as nx
     from pyvis.network import Network
     
-    # Use directed graph for hierarchical layout
-    G = nx.DiGraph()
+    # Use undirected graph for natural clustering
+    G = nx.Graph()
     
     print(f"\n{'='*60}")
-    print(f"BUILDING KNOWLEDGE GRAPH from {len(evidence_table)} items")
+    print(f"BUILDING NETWORK GRAPH from {len(evidence_table)} items")
     print(f"{'='*60}")
     
     # Track nodes by type
@@ -173,9 +173,8 @@ def build_knowledge_graph(evidence_table):
         if manufacturer == "Unknown":
             continue
         
-        # Create unique drug identifier (use active ingredient if drug_name == manufacturer)
+        # Create unique drug identifier
         if drug_name == manufacturer or drug_name == "Unknown":
-            # Use active ingredient as drug name if available
             if active_ingredient and active_ingredient != "N/A":
                 drug_identifier = active_ingredient
             else:
@@ -185,143 +184,156 @@ def build_knowledge_graph(evidence_table):
         
         print(f"\n{idx}. {manufacturer} -> {drug_identifier}")
         
-        # Add MANUFACTURER node (blue, top layer)
+        # Add MANUFACTURER node (LARGE BLUE CIRCLE)
         if manufacturer not in manufacturers_added:
             G.add_node(
                 manufacturer,
-                label=manufacturer[:30],  # Truncate long names
+                label=manufacturer[:30],
                 title=f"Manufacturer: {manufacturer}",
                 color="#3b82f6",  # bright blue
-                size=40,
-                level=0,  # Top layer
-                shape="box",
-                font={'size': 14, 'color': 'white', 'bold': True}
+                size=50,  # LARGER
+                shape="dot",  # Circle
+                borderWidth=3,
+                borderWidthSelected=4,
+                font={'size': 16, 'color': 'white', 'bold': True, 'face': 'arial'}
             )
             manufacturers_added.add(manufacturer)
-            print(f"   Added MANUFACTURER node: {manufacturer}")
+            print(f"   + Manufacturer (blue): {manufacturer}")
         
-        # Add DRUG node (green, middle layer)
+        # Add DRUG node (MEDIUM GREEN CIRCLE)
         if drug_identifier not in drugs_added:
             G.add_node(
                 drug_identifier,
                 label=drug_identifier[:30],
-                title=f"Drug/Product: {drug_identifier}",
+                title=f"Drug: {drug_identifier}",
                 color="#10b981",  # bright green
-                size=35,
-                level=1,  # Middle layer
-                shape="ellipse",
-                font={'size': 12, 'color': 'white'}
+                size=35,  # Medium
+                shape="dot",  # Circle
+                borderWidth=2,
+                font={'size': 14, 'color': 'white', 'face': 'arial'}
             )
             drugs_added.add(drug_identifier)
-            print(f"   Added DRUG node: {drug_identifier}")
+            print(f"   + Drug (green): {drug_identifier}")
         
-        # Add EDGE: Manufacturer -> Drug (BRIGHT WHITE, THICK)
+        # Add EDGE: Manufacturer ↔ Drug (THICK WHITE LINE)
         if not G.has_edge(manufacturer, drug_identifier):
             G.add_edge(
                 manufacturer,
                 drug_identifier,
                 title="manufactures",
-                color="#FFFFFF",  # BRIGHT WHITE
-                width=4,  # VERY THICK
-                arrows="to"
+                color={'color': '#FFFFFF', 'highlight': '#FFFF00'},  # white, highlight yellow
+                width=5,  # VERY THICK
+                value=5  # For scaling
             )
             edge_count += 1
-            print(f"   Added EDGE: {manufacturer} -> {drug_identifier} (WHITE, width 4)")
+            print(f"   ✓ Edge: {manufacturer} ↔ {drug_identifier}")
         
-        # Add INGREDIENTS (orange, bottom layer)
+        # Add INGREDIENTS (SMALL ORANGE CIRCLES)
         if ingredients_str:
-            # Parse pipe-separated ingredients
             ingredients_list = [ing.strip() for ing in ingredients_str.split("|") if ing.strip()]
             
-            for ingredient in ingredients_list[:2]:  # Limit to 2 per drug
-                if len(ingredient) > 3 and ingredient not in ingredients_added:
-                    G.add_node(
-                        ingredient,
-                        label=ingredient[:25],
-                        title=f"Ingredient: {ingredient}",
-                        color="#f59e0b",  # bright orange
-                        size=30,
-                        level=2,  # Bottom layer
-                        shape="dot",
-                        font={'size': 10, 'color': 'white'}
-                    )
-                    ingredients_added.add(ingredient)
-                    print(f"     Added INGREDIENT node: {ingredient}")
-                
-                # Add EDGE: Drug -> Ingredient (LIGHT GRAY, MEDIUM)
-                if ingredient in ingredients_added and not G.has_edge(drug_identifier, ingredient):
-                    G.add_edge(
-                        drug_identifier,
-                        ingredient,
-                        title="contains",
-                        color="#CCCCCC",  # LIGHT GRAY
-                        width=2,
-                        arrows="to"
-                    )
-                    edge_count += 1
-                    print(f"     Added EDGE: {drug_identifier} -> {ingredient} (GRAY, width 2)")
+            for ingredient in ingredients_list[:3]:  # Up to 3 ingredients
+                if len(ingredient) > 3:
+                    if ingredient not in ingredients_added:
+                        G.add_node(
+                            ingredient,
+                            label=ingredient[:20],
+                            title=f"Ingredient: {ingredient}",
+                            color="#f59e0b",  # bright orange
+                            size=25,  # Smaller
+                            shape="dot",  # Circle
+                            borderWidth=1,
+                            font={'size': 12, 'color': 'white', 'face': 'arial'}
+                        )
+                        ingredients_added.add(ingredient)
+                        print(f"     + Ingredient (orange): {ingredient}")
+                    
+                    # Add EDGE: Drug ↔ Ingredient (MEDIUM GRAY LINE)
+                    if not G.has_edge(drug_identifier, ingredient):
+                        G.add_edge(
+                            drug_identifier,
+                            ingredient,
+                            title="contains",
+                            color={'color': '#999999', 'highlight': '#FFFF00'},  # light gray
+                            width=3,
+                            value=3
+                        )
+                        edge_count += 1
+                        print(f"     ✓ Edge: {drug_identifier} ↔ {ingredient}")
     
     print(f"\n{'='*60}")
-    print(f"GRAPH SUMMARY:")
-    print(f"  Manufacturers (blue boxes): {len(manufacturers_added)}")
-    print(f"  Drugs (green circles): {len(drugs_added)}")
-    print(f"  Ingredients (orange dots): {len(ingredients_added)}")
+    print(f"NETWORK SUMMARY:")
+    print(f"  🔵 Manufacturers: {len(manufacturers_added)}")
+    print(f"  🟢 Drugs: {len(drugs_added)}")
+    print(f"  🟠 Ingredients: {len(ingredients_added)}")
     print(f"  Total nodes: {len(G.nodes())}")
     print(f"  Total edges: {edge_count}")
     print(f"{'='*60}\n")
     
     if len(G.nodes()) == 0:
-        print("⚠️  No nodes created - check evidence_table structure")
+        print("⚠️  No nodes created - check evidence_table")
         return None, 0, 0
     
-    # Create PyVis network with HIERARCHICAL layout
+    # Create PyVis with PHYSICS-BASED layout (force-directed)
     net = Network(
         height="500px",
         width="100%",
         bgcolor="#1e1e1e",
         font_color="white",
-        directed=True,
         notebook=False
     )
     
-    # Import NetworkX graph
+    # Import graph
     net.from_nx(G)
     
-    # Use HIERARCHICAL layout with explicit levels
+    # Configure FORCE-DIRECTED PHYSICS (like Neo4j)
     net.set_options("""
     {
       "nodes": {
-        "font": {"size": 12, "color": "white", "face": "arial"}
+        "font": {"size": 14, "color": "white", "face": "arial"},
+        "scaling": {
+          "min": 10,
+          "max": 50
+        }
       },
       "edges": {
         "color": {"inherit": false},
         "smooth": {
-          "enabled": false
-        },
-        "arrows": {
-          "to": {
-            "enabled": true,
-            "scaleFactor": 0.5
-          }
-        }
-      },
-      "layout": {
-        "hierarchical": {
           "enabled": true,
-          "direction": "UD",
-          "sortMethod": "directed",
-          "levelSeparation": 150,
-          "nodeSpacing": 200
+          "type": "continuous",
+          "roundness": 0.5
+        },
+        "scaling": {
+          "min": 1,
+          "max": 5
         }
       },
       "physics": {
-        "enabled": false
+        "enabled": true,
+        "barnesHut": {
+          "gravitationalConstant": -80000,
+          "centralGravity": 0.3,
+          "springLength": 200,
+          "springConstant": 0.04,
+          "damping": 0.5,
+          "avoidOverlap": 0.5
+        },
+        "stabilization": {
+          "enabled": true,
+          "iterations": 200,
+          "updateInterval": 25
+        },
+        "minVelocity": 0.75
       },
       "interaction": {
         "hover": true,
         "tooltipDelay": 100,
         "zoomView": true,
-        "dragView": true
+        "dragView": true,
+        "navigationButtons": true,
+        "keyboard": {
+          "enabled": true
+        }
       }
     }
     """)
