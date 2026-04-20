@@ -336,14 +336,14 @@ Please provide a comprehensive answer with citations."""
 
 
 # Convenience functions for backward compatibility
-_orchestrator = None
-
 def get_orchestrator(faiss_index_path: str = None) -> HealthcareGraphRAG:
-    """Singleton accessor for the orchestrator"""
-    global _orchestrator
-    if _orchestrator is None:
-        _orchestrator = HealthcareGraphRAG(faiss_index_path=faiss_index_path)
-    return _orchestrator
+    """
+    Factory function for creating orchestrator instances.
+    
+    Note: Caching should be handled by the calling application (e.g., Streamlit)
+    to ensure proper invalidation when paths or configuration change.
+    """
+    return HealthcareGraphRAG(faiss_index_path=faiss_index_path)
 
 
 def query_regulatory_agent(query: str, faiss_index_path: str = None) -> Dict[str, Any]:

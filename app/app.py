@@ -33,6 +33,35 @@ import os
 from graph_engine.langgraph_orchestrator import get_orchestrator
 
 
+@st.cache_resource(show_spinner=False)
+def get_cached_orchestrator(faiss_index_path: str):
+    """
+    Cached orchestrator initialization for Streamlit.
+    
+    The orchestrator is expensive to initialize (loads embedding model + FAISS index).
+    Cache it with st.cache_resource to avoid reloading on every query.
+    
+    Args:
+        faiss_index_path: Path to FAISS index directory
+    
+    Returns:
+        Initialized HealthcareGraphRAG orchestrator
+    """
+    print(f"🔄 Initializing orchestrator (this happens once per deployment)...")
+    print(f"   FAISS path: {faiss_index_path}")
+    
+    orchestrator = get_orchestrator(faiss_index_path=faiss_index_path)
+    
+    # Verify the vector store loaded successfully
+    if orchestrator.vector_store is None:
+        st.error("⚠️ FAISS index failed to load! Check Streamlit logs for details.")
+        print("❌ CRITICAL: FAISS vector store is None - searches will return no results")
+    else:
+        print("✅ Orchestrator initialized successfully with FAISS index")
+    
+    return orchestrator
+
+
 # Page Configuration
 st.set_page_config(
     page_title="Healthcare Regulatory Intelligence",
@@ -164,7 +193,7 @@ def main():
                 print(f"DEBUG: Loading FAISS from: {faiss_index_path}")
                 
                 # Initialize orchestrator and execute query
-                orchestrator = get_orchestrator(faiss_index_path=faiss_index_path)
+                orchestrator = get_cached_orchestrator(faiss_index_path)
                 results = orchestrator.query(normalized_query)
                 
                 st.session_state["results"] = results
