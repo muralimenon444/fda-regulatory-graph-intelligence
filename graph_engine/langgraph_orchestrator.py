@@ -153,9 +153,12 @@ class HealthcareGraphRAG:
                         "metadata": doc.metadata,
                         "similarity_score": float(score),
                         # Extract common fields if available in metadata
-                        "brand_name": doc.metadata.get("brand_name", "Unknown"),
+                        "manufacturer": doc.metadata.get("manufacturer", "Unknown"),
+                        "drug_name": doc.metadata.get("drug_name", "Unknown"),
+                        "brand_name": doc.metadata.get("manufacturer", doc.metadata.get("drug_name", "Unknown")),
                         "clinical_indications": doc.metadata.get("clinical_indications", doc.page_content),
-                        "active_ingredient": doc.metadata.get("active_ingredient", "N/A")
+                        "active_ingredient": doc.metadata.get("active_ingredient", "N/A"),
+                        "ingredients": doc.metadata.get("ingredients", "")
                     })
                 
                 print(f"✅ Retrieved {len(vector_results)} results from FAISS index")
@@ -191,15 +194,21 @@ class HealthcareGraphRAG:
         if vector_results:
             context_parts.append("**Vector Search Results (Clinical Indications):**")
             for i, result in enumerate(vector_results[:5], 1):
-                brand_name = result.get('brand_name', 'Unknown')
+                manufacturer = result.get('manufacturer', 'Unknown')
+                drug_name = result.get('drug_name', manufacturer)
                 indication = result.get('clinical_indications', 'N/A')
                 score = result.get('similarity_score', 0.0)
                 
                 # Truncate long indications
                 indication_preview = indication[:200] + "..." if len(indication) > 200 else indication
                 
+                # Format: Manufacturer (Drug Name): Indication
+                label = f"{manufacturer}"
+                if drug_name and drug_name != manufacturer:
+                    label += f" ({drug_name})"
+                
                 context_parts.append(
-                    f"{i}. {brand_name}: {indication_preview} (similarity: {score:.3f})"
+                    f"{i}. {label}: {indication_preview} (similarity: {score:.3f})"
                 )
         
         if graph_results:
@@ -262,10 +271,14 @@ Please provide a comprehensive answer with citations."""
         
         # Extract from vector results
         for result in vector_results:
-            brand_name = result.get("brand_name", "").lower()
+            manufacturer = result.get("manufacturer", "").lower()
+            drug_name = result.get("drug_name", "").lower()
             ingredient = result.get("active_ingredient", "").lower()
-            if brand_name and brand_name != "unknown":
-                mentioned_entities.add(brand_name)
+            
+            if manufacturer and manufacturer != "unknown":
+                mentioned_entities.add(manufacturer)
+            if drug_name and drug_name != "unknown" and drug_name != manufacturer:
+                mentioned_entities.add(drug_name)
             if ingredient and ingredient != "n/a":
                 mentioned_entities.add(ingredient)
         
@@ -284,9 +297,19 @@ Please provide a comprehensive answer with citations."""
         # Build evidence table for UI
         evidence_table = []
         for i, result in enumerate(vector_results[:20], 1):
+            manufacturer = result.get("manufacturer", "Unknown")
+            drug_name = result.get("drug_name", manufacturer)
+            
+            # Show both manufacturer and drug name if different
+            display_name = manufacturer
+            if drug_name and drug_name != manufacturer:
+                display_name += f" ({drug_name})"
+            
             evidence_table.append({
                 "rank": i,
-                "brand_name": result.get("brand_name", "Unknown"),
+                "manufacturer": manufacturer,
+                "drug_name": drug_name,
+                "brand_name": display_name,
                 "indication": result.get("clinical_indications", "N/A")[:150],
                 "similarity": f"{result.get('similarity_score', 0.0):.3f}"
             })
