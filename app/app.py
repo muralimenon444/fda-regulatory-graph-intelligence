@@ -140,7 +140,7 @@ import networkx as nx
 
 def build_knowledge_graph(evidence_table):
     """
-    Build interactive knowledge graph from evidence_table
+    Build hierarchical knowledge graph: Manufacturers → Drugs → Ingredients
     
     Args:
         evidence_table: List of dicts with manufacturer, drug_name, ingredients
@@ -151,141 +151,177 @@ def build_knowledge_graph(evidence_table):
     import networkx as nx
     from pyvis.network import Network
     
-    G = nx.Graph()
+    # Use directed graph for hierarchical layout
+    G = nx.DiGraph()
     
-    # Track unique entities to avoid duplicates
-    manufacturers = set()
-    drugs = set()
-    ingredients_set = set()
+    print(f"\n{'='*60}")
+    print(f"BUILDING KNOWLEDGE GRAPH from {len(evidence_table)} items")
+    print(f"{'='*60}")
     
-    print(f"DEBUG: Building graph from {len(evidence_table)} evidence items")
+    # Track nodes by type
+    manufacturers_added = set()
+    drugs_added = set()
+    ingredients_added = set()
+    edge_count = 0
     
-    for idx, item in enumerate(evidence_table):
+    for idx, item in enumerate(evidence_table[:10], 1):  # Limit to 10 items for clarity
         manufacturer = item.get("manufacturer", "Unknown")
         drug_name = item.get("drug_name", "Unknown")
+        ingredients_str = item.get("ingredients", "")
+        active_ingredient = item.get("active_ingredient", "N/A")
         
-        # Get ingredients from the evidence table
-        # The orchestrator includes 'ingredients' field (pipe-separated)
-        ingredient_str = item.get("ingredients", "")
-        
-        print(f"DEBUG: Item {idx+1}: {manufacturer} -> {drug_name}")
-        
-        # Skip if missing critical data
         if manufacturer == "Unknown":
             continue
         
-        # Add manufacturer node (blue)
-        if manufacturer not in manufacturers:
+        # Create unique drug identifier (use active ingredient if drug_name == manufacturer)
+        if drug_name == manufacturer or drug_name == "Unknown":
+            # Use active ingredient as drug name if available
+            if active_ingredient and active_ingredient != "N/A":
+                drug_identifier = active_ingredient
+            else:
+                drug_identifier = f"{manufacturer}_product"
+        else:
+            drug_identifier = drug_name
+        
+        print(f"\n{idx}. {manufacturer} -> {drug_identifier}")
+        
+        # Add MANUFACTURER node (blue, top layer)
+        if manufacturer not in manufacturers_added:
             G.add_node(
-                manufacturer, 
+                manufacturer,
+                label=manufacturer[:30],  # Truncate long names
                 title=f"Manufacturer: {manufacturer}",
                 color="#3b82f6",  # bright blue
-                size=35,
-                group="manufacturer",
-                borderWidth=3,
-                borderColor="white"
+                size=40,
+                level=0,  # Top layer
+                shape="box",
+                font={'size': 14, 'color': 'white', 'bold': True}
             )
-            manufacturers.add(manufacturer)
+            manufacturers_added.add(manufacturer)
+            print(f"   Added MANUFACTURER node: {manufacturer}")
         
-        # Add drug node (green) - even if drug_name == manufacturer
-        drug_node_name = drug_name if drug_name != "Unknown" else manufacturer
-        if drug_node_name not in drugs:
+        # Add DRUG node (green, middle layer)
+        if drug_identifier not in drugs_added:
             G.add_node(
-                drug_node_name,
-                title=f"Drug: {drug_node_name}",
+                drug_identifier,
+                label=drug_identifier[:30],
+                title=f"Drug/Product: {drug_identifier}",
                 color="#10b981",  # bright green
-                size=30,
-                group="drug",
-                borderWidth=2,
-                borderColor="white"
+                size=35,
+                level=1,  # Middle layer
+                shape="ellipse",
+                font={'size': 12, 'color': 'white'}
             )
-            drugs.add(drug_node_name)
+            drugs_added.add(drug_identifier)
+            print(f"   Added DRUG node: {drug_identifier}")
         
-        # Add edge: manufacturer → drug (BRIGHT WHITE)
-        if not G.has_edge(manufacturer, drug_node_name):
-            G.add_edge(manufacturer, drug_node_name, 
-                      title="manufactures",
-                      color="#ffffff",  # white edges
-                      width=3)
-            print(f"  Added edge: {manufacturer} -> {drug_node_name}")
+        # Add EDGE: Manufacturer -> Drug (BRIGHT WHITE, THICK)
+        if not G.has_edge(manufacturer, drug_identifier):
+            G.add_edge(
+                manufacturer,
+                drug_identifier,
+                title="manufactures",
+                color="#FFFFFF",  # BRIGHT WHITE
+                width=4,  # VERY THICK
+                arrows="to"
+            )
+            edge_count += 1
+            print(f"   Added EDGE: {manufacturer} -> {drug_identifier} (WHITE, width 4)")
         
-        # Add ingredient nodes (orange)
-        if ingredient_str:
-            ingredients_list = ingredient_str.split("|")
-            print(f"  Ingredients: {len(ingredients_list)} found")
+        # Add INGREDIENTS (orange, bottom layer)
+        if ingredients_str:
+            # Parse pipe-separated ingredients
+            ingredients_list = [ing.strip() for ing in ingredients_str.split("|") if ing.strip()]
             
-            for ingredient in ingredients_list[:2]:  # Limit to 2 ingredients per drug
-                ingredient = ingredient.strip()
-                if ingredient and len(ingredient) > 3:
-                    if ingredient not in ingredients_set:
-                        G.add_node(
-                            ingredient,
-                            title=f"Ingredient: {ingredient}",
-                            color="#f59e0b",  # bright orange
-                            size=25,
-                            group="ingredient",
-                            borderWidth=2,
-                            borderColor="white"
-                        )
-                        ingredients_set.add(ingredient)
-                    
-                    if not G.has_edge(drug_node_name, ingredient):
-                        G.add_edge(drug_node_name, ingredient, 
-                                  title="contains",
-                                  color="#cccccc",  # light gray
-                                  width=2)
-                        print(f"    Added edge: {drug_node_name} -> {ingredient}")
+            for ingredient in ingredients_list[:2]:  # Limit to 2 per drug
+                if len(ingredient) > 3 and ingredient not in ingredients_added:
+                    G.add_node(
+                        ingredient,
+                        label=ingredient[:25],
+                        title=f"Ingredient: {ingredient}",
+                        color="#f59e0b",  # bright orange
+                        size=30,
+                        level=2,  # Bottom layer
+                        shape="dot",
+                        font={'size': 10, 'color': 'white'}
+                    )
+                    ingredients_added.add(ingredient)
+                    print(f"     Added INGREDIENT node: {ingredient}")
+                
+                # Add EDGE: Drug -> Ingredient (LIGHT GRAY, MEDIUM)
+                if ingredient in ingredients_added and not G.has_edge(drug_identifier, ingredient):
+                    G.add_edge(
+                        drug_identifier,
+                        ingredient,
+                        title="contains",
+                        color="#CCCCCC",  # LIGHT GRAY
+                        width=2,
+                        arrows="to"
+                    )
+                    edge_count += 1
+                    print(f"     Added EDGE: {drug_identifier} -> {ingredient} (GRAY, width 2)")
     
-    print(f"DEBUG: Graph built - Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
-    print(f"  Manufacturers: {len(manufacturers)}")
-    print(f"  Drugs: {len(drugs)}")
-    print(f"  Ingredients: {len(ingredients_set)}")
+    print(f"\n{'='*60}")
+    print(f"GRAPH SUMMARY:")
+    print(f"  Manufacturers (blue boxes): {len(manufacturers_added)}")
+    print(f"  Drugs (green circles): {len(drugs_added)}")
+    print(f"  Ingredients (orange dots): {len(ingredients_added)}")
+    print(f"  Total nodes: {len(G.nodes())}")
+    print(f"  Total edges: {edge_count}")
+    print(f"{'='*60}\n")
     
-    # Create PyVis network with better visibility
+    if len(G.nodes()) == 0:
+        print("⚠️  No nodes created - check evidence_table structure")
+        return None, 0, 0
+    
+    # Create PyVis network with HIERARCHICAL layout
     net = Network(
         height="500px",
         width="100%",
         bgcolor="#1e1e1e",
         font_color="white",
+        directed=True,
         notebook=False
     )
     
     # Import NetworkX graph
     net.from_nx(G)
     
-    # Configure physics for clustered layout
+    # Use HIERARCHICAL layout with explicit levels
     net.set_options("""
     {
       "nodes": {
-        "font": {"size": 12, "color": "white", "face": "arial"},
-        "borderWidth": 2
+        "font": {"size": 12, "color": "white", "face": "arial"}
       },
       "edges": {
         "color": {"inherit": false},
         "smooth": {
-          "enabled": true,
-          "type": "continuous"
+          "enabled": false
         },
-        "width": 2
+        "arrows": {
+          "to": {
+            "enabled": true,
+            "scaleFactor": 0.5
+          }
+        }
+      },
+      "layout": {
+        "hierarchical": {
+          "enabled": true,
+          "direction": "UD",
+          "sortMethod": "directed",
+          "levelSeparation": 150,
+          "nodeSpacing": 200
+        }
       },
       "physics": {
-        "enabled": true,
-        "barnesHut": {
-          "gravitationalConstant": -40000,
-          "centralGravity": 0.4,
-          "springLength": 120,
-          "springConstant": 0.05,
-          "damping": 0.5
-        },
-        "minVelocity": 0.75,
-        "stabilization": {
-          "enabled": true,
-          "iterations": 100
-        }
+        "enabled": false
       },
       "interaction": {
         "hover": true,
-        "tooltipDelay": 100
+        "tooltipDelay": 100,
+        "zoomView": true,
+        "dragView": true
       }
     }
     """)
@@ -304,11 +340,18 @@ def display_knowledge_graph(evidence_table):
         st.info("No graph data available. Run a search to see relationships.")
         return
     
-    st.markdown("*Drag nodes • Zoom with wheel • Click for details*")
+    st.markdown("*Hierarchical view: Manufacturers ➜ Drugs ➜ Ingredients*")
     
     try:
         # Build graph
-        net, node_count, edge_count = build_knowledge_graph(evidence_table)
+        result = build_knowledge_graph(evidence_table)
+        
+        if result is None or result[0] is None:
+            st.warning("Unable to build graph. Check Streamlit logs for details.")
+            print("⚠️  build_knowledge_graph returned None")
+            return
+        
+        net, node_count, edge_count = result
         
         if node_count == 0:
             st.warning("No graph relationships found in evidence.")

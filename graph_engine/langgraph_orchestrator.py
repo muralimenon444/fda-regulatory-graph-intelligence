@@ -337,7 +337,9 @@ Please provide a comprehensive answer with citations."""
                 "drug_name": drug_name,
                 "brand_name": display_name,
                 "indication": result.get("clinical_indications", "N/A")[:150],
-                "similarity": f"{result.get('similarity_score', 0.0):.3f}"
+                "similarity": f"{result.get('similarity_score', 0.0):.3f}",
+                "ingredients": result.get("ingredients", ""),  # ADD THIS for graph visualization
+                "active_ingredient": result.get("active_ingredient", "N/A")
             })
         
         state["evidence_table"] = evidence_table
