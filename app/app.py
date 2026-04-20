@@ -70,6 +70,83 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
+# ============================================================================
+# Sample Questions Sidebar
+# ============================================================================
+
+def load_sample_questions():
+    """Load sample questions from JSON file"""
+    import json
+    questions_file = os.path.join(repo_root, "sample_questions.json")
+    
+    if os.path.exists(questions_file):
+        with open(questions_file, 'r') as f:
+            return json.load(f)
+    else:
+        # Fallback questions if file not found
+        return {
+            "categories": {
+                "NSAIDs & Pain Management": [
+                    "Which manufacturers produce NSAID medications for arthritis treatment?",
+                    "What are the clinical indications for celecoxib?",
+                ],
+                "Cardiovascular & Hypertension": [
+                    "Which companies manufacture blood pressure medications?",
+                    "What are the indications for losartan and hydrochlorothiazide combinations?",
+                ]
+            }
+        }
+
+def render_sample_questions_sidebar():
+    """Render interactive sample questions in sidebar"""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 💡 Sample Questions")
+    
+    questions_data = load_sample_questions()
+    
+    with st.sidebar.expander("📋 Browse by Category", expanded=False):
+        st.markdown("""
+        <style>
+        .sample-question-btn {
+            background: #f3f4f6;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #3b82f6;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .sample-question-btn:hover {
+            background: #e5e7eb;
+            border-left-color: #2563eb;
+        }
+        .category-header {
+            font-weight: 600;
+            color: #1f2937;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        for category, questions in questions_data.get("categories", {}).items():
+            st.markdown(f"<div class='category-header'>🏷️ {category}</div>", unsafe_allow_html=True)
+            
+            for i, question in enumerate(questions, 1):
+                # Use a unique key for each button
+                btn_key = f"{category}_{i}"
+                if st.button(
+                    f"{i}. {question[:60]}..." if len(question) > 60 else f"{i}. {question}",
+                    key=btn_key,
+                    help=question,
+                    use_container_width=True
+                ):
+                    # Store selected question in session state
+                    st.session_state['selected_question'] = question
+                    st.rerun()
+
+# 
 # Custom CSS for professional layout
 st.markdown("""
 <style>
@@ -424,9 +501,19 @@ def main():
                 st.session_state["query_input"] = query
     
     # Main Query Input
+    # Check if question selected from sidebar
+    default_query = st.session_state.get('selected_question', '')
+    if default_query:
+        st.session_state.pop('selected_question', None)
+    
     query = st.text_input(
         "Enter your research question:",
         placeholder="e.g., What are the clinical indications for MELOXICAM?",
+        key="query_input"
+    query = st.text_input(
+        "🔍 Enter your regulatory intelligence question:",
+        value=default_query,
+        placeholder="e.g., Which manufacturers produce NSAID medications? Or click a sample question from sidebar →",
         key="query_input"
     )
     
@@ -452,7 +539,11 @@ def main():
                 print(f"DEBUG: Active LLM Endpoint: {MODEL_ENDPOINT}")
                 print(f"DEBUG: Loading FAISS from: {faiss_index_path}")
                 
-                # Initialize orchestrator and execute query
+                
+# Render sample questions in sidebar
+render_sample_questions_sidebar()
+
+# Initialize orchestrator and execute query
                 orchestrator = get_cached_orchestrator(faiss_index_path)
                 results = orchestrator.query(normalized_query)
                 
@@ -542,6 +633,11 @@ def main():
     st.divider()
     st.caption("Healthcare Regulatory Intelligence System | Medallion Architecture | GraphRAG + LangGraph")
 
+
+
+# Initialize session state
+if 'selected_question' not in st.session_state:
+    st.session_state['selected_question'] = ''
 
 if __name__ == "__main__":
     main()

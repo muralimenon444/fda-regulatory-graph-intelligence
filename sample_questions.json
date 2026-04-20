@@ -1,0 +1,116 @@
+{
+  "categories": {
+    "NSAIDs & Pain Management": [
+      "Which manufacturers produce NSAID medications for arthritis treatment?",
+      "What are the clinical indications for celecoxib?",
+      "List all pain relief medications and their active ingredients",
+      "Compare NSAID manufacturers and their product portfolios"
+    ],
+    "Cardiovascular & Hypertension": [
+      "Which companies manufacture blood pressure medications?",
+      "What are the indications for losartan and hydrochlorothiazide combinations?",
+      "Show me all hypertension medications available",
+      "Which manufacturers produce cardiovascular drugs?"
+    ],
+    "Diabetes & Metabolic": [
+      "Which manufacturers produce diabetes medications?",
+      "What are the clinical indications for dapagliflozin?",
+      "List all diabetes drugs and their mechanisms of action",
+      "Compare diabetes medication manufacturers"
+    ],
+    "Antibiotics & Infections": [
+      "Which companies manufacture cephalexin antibiotics?",
+      "Show me all antibiotic medications for bacterial infections",
+      "What are the indications for sulfamethoxazole-trimethoprim?",
+      "List antibiotic manufacturers and their products"
+    ],
+    "Mental Health & Neurology": [
+      "Which manufacturers produce antidepressant medications?",
+      "What are the clinical indications for trazodone?",
+      "Show me all mental health medications available",
+      "Compare manufacturers of neurological drugs"
+    ]
+  },
+  "all_questions": [
+    {
+      "category": "NSAIDs & Pain Management",
+      "question": "Which manufacturers produce NSAID medications for arthritis treatment?"
+    },
+    {
+      "category": "NSAIDs & Pain Management",
+      "question": "What are the clinical indications for celecoxib?"
+    },
+    {
+      "category": "NSAIDs & Pain Management",
+      "question": "List all pain relief medications and their active ingredients"
+    },
+    {
+      "category": "NSAIDs & Pain Management",
+      "question": "Compare NSAID manufacturers and their product portfolios"
+    },
+    {
+      "category": "Cardiovascular & Hypertension",
+      "question": "Which companies manufacture blood pressure medications?"
+    },
+    {
+      "category": "Cardiovascular & Hypertension",
+      "question": "What are the indications for losartan and hydrochlorothiazide combinations?"
+    },
+    {
+      "category": "Cardiovascular & Hypertension",
+      "question": "Show me all hypertension medications available"
+    },
+    {
+      "category": "Cardiovascular & Hypertension",
+      "question": "Which manufacturers produce cardiovascular drugs?"
+    },
+    {
+      "category": "Diabetes & Metabolic",
+      "question": "Which manufacturers produce diabetes medications?"
+    },
+    {
+      "category": "Diabetes & Metabolic",
+      "question": "What are the clinical indications for dapagliflozin?"
+    },
+    {
+      "category": "Diabetes & Metabolic",
+      "question": "List all diabetes drugs and their mechanisms of action"
+    },
+    {
+      "category": "Diabetes & Metabolic",
+      "question": "Compare diabetes medication manufacturers"
+    },
+    {
+      "category": "Antibiotics & Infections",
+      "question": "Which companies manufacture cephalexin antibiotics?"
+    },
+    {
+      "category": "Antibiotics & Infections",
+      "question": "Show me all antibiotic medications for bacterial infections"
+    },
+    {
+      "category": "Antibiotics & Infections",
+      "question": "What are the indications for sulfamethoxazole-trimethoprim?"
+    },
+    {
+      "category": "Antibiotics & Infections",
+      "question": "List antibiotic manufacturers and their products"
+    },
+    {
+      "category": "Mental Health & Neurology",
+      "question": "Which manufacturers produce antidepressant medications?"
+    },
+    {
+      "category": "Mental Health & Neurology",
+      "question": "What are the clinical indications for trazodone?"
+    },
+    {
+      "category": "Mental Health & Neurology",
+      "question": "Show me all mental health medications available"
+    },
+    {
+      "category": "Mental Health & Neurology",
+      "question": "Compare manufacturers of neurological drugs"
+    }
+  ]
+}
