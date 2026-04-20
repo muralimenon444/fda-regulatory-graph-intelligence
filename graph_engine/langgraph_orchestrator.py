@@ -71,17 +71,43 @@ class HealthcareGraphRAG:
         
         # Load FAISS index from disk
         print(f"Loading FAISS index from: {self.faiss_index_path}")
-        try:
-            self.vector_store = FAISS.load_local(
-                self.faiss_index_path,
-                self.embeddings,
-                allow_dangerous_deserialization=True  # Required for FAISS loading
-            )
-            print("SUCCESS: Orchestrator initialized using local FAISS index.")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not load FAISS index from {self.faiss_index_path}: {e}")
-            print("   Orchestrator will continue but vector search will be unavailable.")
+        
+        # Check if index files exist
+        index_faiss_file = os.path.join(self.faiss_index_path, "index.faiss")
+        index_pkl_file = os.path.join(self.faiss_index_path, "index.pkl")
+        
+        print(f"  Checking for index.faiss: {os.path.exists(index_faiss_file)}")
+        print(f"  Checking for index.pkl: {os.path.exists(index_pkl_file)}")
+        
+        if not os.path.exists(index_faiss_file):
+            print(f"❌ ERROR: index.faiss not found at {index_faiss_file}")
             self.vector_store = None
+        elif not os.path.exists(index_pkl_file):
+            print(f"❌ ERROR: index.pkl not found at {index_pkl_file}")
+            self.vector_store = None
+        else:
+            try:
+                print(f"  Attempting to load FAISS index...")
+                self.vector_store = FAISS.load_local(
+                    self.faiss_index_path,
+                    self.embeddings,
+                    allow_dangerous_deserialization=True  # Required for FAISS loading
+                )
+                print("✅ SUCCESS: FAISS index loaded successfully")
+                
+                # Verify it works
+                try:
+                    test_results = self.vector_store.similarity_search("test", k=1)
+                    print(f"✅ FAISS index verification: {len(test_results)} results returned")
+                except Exception as test_e:
+                    print(f"⚠️  FAISS index loaded but search failed: {test_e}")
+                    
+            except Exception as e:
+                print(f"❌ ERROR: Failed to load FAISS index: {type(e).__name__}: {str(e)}")
+                print(f"   Full error: {repr(e)}")
+                import traceback
+                traceback.print_exc()
+                self.vector_store = None
         
         # Initialize Databricks client for LLM calls
         # Explicitly pull credentials from environment variables (provided by Streamlit Secrets)
