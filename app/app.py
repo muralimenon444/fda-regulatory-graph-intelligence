@@ -507,10 +507,6 @@ def main():
         st.session_state.pop('selected_question', None)
     
     query = st.text_input(
-        "Enter your research question:",
-        placeholder="e.g., What are the clinical indications for MELOXICAM?",
-        key="query_input"
-    query = st.text_input(
         "🔍 Enter your regulatory intelligence question:",
         value=default_query,
         placeholder="e.g., Which manufacturers produce NSAID medications? Or click a sample question from sidebar →",
@@ -540,10 +536,6 @@ def main():
                 print(f"DEBUG: Loading FAISS from: {faiss_index_path}")
                 
                 
-# Render sample questions in sidebar
-render_sample_questions_sidebar()
-
-# Initialize orchestrator and execute query
                 orchestrator = get_cached_orchestrator(faiss_index_path)
                 results = orchestrator.query(normalized_query)
                 
@@ -638,6 +630,10 @@ render_sample_questions_sidebar()
 # Initialize session state
 if 'selected_question' not in st.session_state:
     st.session_state['selected_question'] = ''
+
+# Render sample questions in sidebar
+render_sample_questions_sidebar()
+
 
 if __name__ == "__main__":
     main()
