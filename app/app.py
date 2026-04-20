@@ -234,15 +234,23 @@ def main():
                 st.markdown(f"**{len(evidence_table)} Knowledge Graph Relationships**")
                 
                 for i, row in enumerate(evidence_table[:15], 1):  # Show top 15
+                    # Get fields with safe defaults
+                    manufacturer = row.get('manufacturer', 'Unknown')
+                    drug_name = row.get('drug_name', '')
+                    indication = row.get('indication', 'N/A')
+                    similarity = row.get('similarity', '0.000')
+                    
+                    # Format display
+                    display_text = manufacturer
+                    if drug_name and drug_name != manufacturer:
+                        display_text += f" ({drug_name})"
+                    
                     st.markdown(f"""
                     <div class="evidence-card">
                         <strong>#{i}</strong><br>
-                        <span class="relationship">
-                            {row['source_entity']} 
-                            <strong>--[{row['relationship_type']}]--></strong> 
-                            {row['target_entity']}
-                        </span><br>
-                        <small>Confidence: {row['confidence_score']:.2f}</small>
+                        <strong>{display_text}</strong><br>
+                        <small>{indication[:100]}...</small><br>
+                        <small>Similarity: {similarity}</small>
                     </div>
                     """, unsafe_allow_html=True)
                 
