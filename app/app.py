@@ -148,68 +148,102 @@ def build_knowledge_graph(evidence_table):
     Returns:
         PyVis Network object, node count, edge count
     """
+    import networkx as nx
+    from pyvis.network import Network
+    
     G = nx.Graph()
     
     # Track unique entities to avoid duplicates
     manufacturers = set()
     drugs = set()
-    ingredients = set()
+    ingredients_set = set()
     
-    for item in evidence_table:
+    print(f"DEBUG: Building graph from {len(evidence_table)} evidence items")
+    
+    for idx, item in enumerate(evidence_table):
         manufacturer = item.get("manufacturer", "Unknown")
         drug_name = item.get("drug_name", "Unknown")
+        
+        # Get ingredients from the evidence table
+        # The orchestrator includes 'ingredients' field (pipe-separated)
         ingredient_str = item.get("ingredients", "")
         
-        # Skip unknown entries
-        if manufacturer == "Unknown" or drug_name == "Unknown":
+        print(f"DEBUG: Item {idx+1}: {manufacturer} -> {drug_name}")
+        
+        # Skip if missing critical data
+        if manufacturer == "Unknown":
             continue
         
-        # Add manufacturer node
+        # Add manufacturer node (blue)
         if manufacturer not in manufacturers:
             G.add_node(
                 manufacturer, 
                 title=f"Manufacturer: {manufacturer}",
-                color="#3b82f6",  # blue
-                size=30,
-                group="manufacturer"
+                color="#3b82f6",  # bright blue
+                size=35,
+                group="manufacturer",
+                borderWidth=3,
+                borderColor="white"
             )
             manufacturers.add(manufacturer)
         
-        # Add drug node
-        if drug_name not in drugs:
+        # Add drug node (green) - even if drug_name == manufacturer
+        drug_node_name = drug_name if drug_name != "Unknown" else manufacturer
+        if drug_node_name not in drugs:
             G.add_node(
-                drug_name,
-                title=f"Drug: {drug_name}",
-                color="#10b981",  # green
-                size=25,
-                group="drug"
+                drug_node_name,
+                title=f"Drug: {drug_node_name}",
+                color="#10b981",  # bright green
+                size=30,
+                group="drug",
+                borderWidth=2,
+                borderColor="white"
             )
-            drugs.add(drug_name)
+            drugs.add(drug_node_name)
         
-        # Add edge: manufacturer → drug
-        if not G.has_edge(manufacturer, drug_name):
-            G.add_edge(manufacturer, drug_name, title="manufactures", color="#888")
+        # Add edge: manufacturer → drug (BRIGHT WHITE)
+        if not G.has_edge(manufacturer, drug_node_name):
+            G.add_edge(manufacturer, drug_node_name, 
+                      title="manufactures",
+                      color="#ffffff",  # white edges
+                      width=3)
+            print(f"  Added edge: {manufacturer} -> {drug_node_name}")
         
-        # Add ingredient nodes (parse pipe-separated list)
+        # Add ingredient nodes (orange)
         if ingredient_str:
-            for ingredient in ingredient_str.split("|")[:3]:  # Limit to 3 ingredients per drug
+            ingredients_list = ingredient_str.split("|")
+            print(f"  Ingredients: {len(ingredients_list)} found")
+            
+            for ingredient in ingredients_list[:2]:  # Limit to 2 ingredients per drug
                 ingredient = ingredient.strip()
-                if ingredient and ingredient not in ingredients:
-                    G.add_node(
-                        ingredient,
-                        title=f"Ingredient: {ingredient}",
-                        color="#f59e0b",  # orange
-                        size=20,
-                        group="ingredient"
-                    )
-                    ingredients.add(ingredient)
-                
-                if ingredient and not G.has_edge(drug_name, ingredient):
-                    G.add_edge(drug_name, ingredient, title="contains", color="#666")
+                if ingredient and len(ingredient) > 3:
+                    if ingredient not in ingredients_set:
+                        G.add_node(
+                            ingredient,
+                            title=f"Ingredient: {ingredient}",
+                            color="#f59e0b",  # bright orange
+                            size=25,
+                            group="ingredient",
+                            borderWidth=2,
+                            borderColor="white"
+                        )
+                        ingredients_set.add(ingredient)
+                    
+                    if not G.has_edge(drug_node_name, ingredient):
+                        G.add_edge(drug_node_name, ingredient, 
+                                  title="contains",
+                                  color="#cccccc",  # light gray
+                                  width=2)
+                        print(f"    Added edge: {drug_node_name} -> {ingredient}")
     
-    # Create PyVis network
+    print(f"DEBUG: Graph built - Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
+    print(f"  Manufacturers: {len(manufacturers)}")
+    print(f"  Drugs: {len(drugs)}")
+    print(f"  Ingredients: {len(ingredients_set)}")
+    
+    # Create PyVis network with better visibility
     net = Network(
-        height="650px",
+        height="500px",
         width="100%",
         bgcolor="#1e1e1e",
         font_color="white",
@@ -219,24 +253,39 @@ def build_knowledge_graph(evidence_table):
     # Import NetworkX graph
     net.from_nx(G)
     
-    # Configure physics for better layout
+    # Configure physics for clustered layout
     net.set_options("""
     {
       "nodes": {
-        "font": {"size": 14, "color": "white"}
+        "font": {"size": 12, "color": "white", "face": "arial"},
+        "borderWidth": 2
       },
       "edges": {
-        "color": {"inherit": true},
-        "smooth": {"type": "continuous"}
+        "color": {"inherit": false},
+        "smooth": {
+          "enabled": true,
+          "type": "continuous"
+        },
+        "width": 2
       },
       "physics": {
+        "enabled": true,
         "barnesHut": {
-          "gravitationalConstant": -35000,
-          "centralGravity": 0.3,
-          "springLength": 150,
-          "springConstant": 0.04
+          "gravitationalConstant": -40000,
+          "centralGravity": 0.4,
+          "springLength": 120,
+          "springConstant": 0.05,
+          "damping": 0.5
         },
-        "minVelocity": 0.75
+        "minVelocity": 0.75,
+        "stabilization": {
+          "enabled": true,
+          "iterations": 100
+        }
+      },
+      "interaction": {
+        "hover": true,
+        "tooltipDelay": 100
       }
     }
     """)
@@ -255,8 +304,7 @@ def display_knowledge_graph(evidence_table):
         st.info("No graph data available. Run a search to see relationships.")
         return
     
-    st.markdown("### 🕸️ Knowledge Graph Visualization")
-    st.markdown("*Drag nodes to explore relationships. Zoom with mouse wheel.*")
+    st.markdown("*Drag nodes • Zoom with wheel • Click for details*")
     
     try:
         # Build graph
@@ -274,7 +322,7 @@ def display_knowledge_graph(evidence_table):
         
         # Generate and display HTML
         graph_html = net.generate_html()
-        components.html(graph_html, height=670, scrolling=False)
+        components.html(graph_html, height=550, scrolling=False)
         
         # Legend
         st.markdown("""
@@ -389,6 +437,18 @@ def main():
             st.markdown(results["final_answer"])
         
         with col_evidence:
+            # Knowledge Graph at the top
+            st.markdown("### 🕸️ Knowledge Graph")
+            
+            evidence_table = results.get("evidence_table", [])
+            
+            if evidence_table and len(evidence_table) > 0:
+                display_knowledge_graph(evidence_table)
+            else:
+                st.info("No graph data available.")
+            
+            # Evidence Table below graph
+            st.divider()
             st.markdown("### 📊 Evidence Table")
             
             evidence_table = results.get("evidence_table", [])
@@ -429,10 +489,6 @@ def main():
                     mime="text/csv"
                 )
             
-                
-                # Knowledge Graph Visualization
-                st.divider()
-                display_knowledge_graph(evidence_table)
             
             else:
                 st.info("No evidence found in knowledge graph.")
